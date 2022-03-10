@@ -9,10 +9,11 @@ import (
 // Configurations
 type Configurations struct {
 	Server struct {
-		Host     string
-		Port     int
-		User     string
-		Password string
+		Host        string
+		Port        int
+		User        string
+		Password    string
+		Connections int
 	}
 	Database struct {
 		Host     string

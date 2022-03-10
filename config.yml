@@ -4,6 +4,7 @@ Server:
   Port: 119
   User: ""
   Password: ""
+  Connections: 50
 
 # MySQL database server settings
 Database:
@@ -22,7 +23,6 @@ Database:
 Groups: "./groups.txt"
 
 # amount of groups to scan in parallel
-# your usenet provider must allow this amount of concurrent connections
 ParallelScans: 50
 
 # amount of message headers to retrieve in one XOVER request per group

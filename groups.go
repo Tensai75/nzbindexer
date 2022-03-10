@@ -24,10 +24,12 @@ func scanGroups() error {
 	}
 	fmt.Println("Connecting to usenet server")
 	conn, err := ConnectNNTP()
+	defer DisconnectNNTP(conn)
 	if err != nil {
 		fmt.Printf("Error while connecting to usenet server: %v\n", err)
 		return err
 	}
+	fmt.Println("Connection to usenet server established")
 	fmt.Println("Requesting the list of groups")
 	filter := ""
 	if conf.Groups == "BINARIES" {
@@ -38,6 +40,7 @@ func scanGroups() error {
 		fmt.Printf("Error while requesting list of groups: %v\n", err)
 		return err
 	}
+	DisconnectNNTP(conn)
 	fmt.Println("Processing the groups")
 	for _, group := range groupsList {
 		groupData := strings.Split(string(group), " ")

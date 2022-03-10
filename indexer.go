@@ -43,7 +43,7 @@ func indexer(group string, ctx context.Context) error {
 	}
 
 	conn, err := ConnectNNTP()
-	defer conn.Quit()
+	defer DisconnectNNTP(conn)
 	if err != nil {
 		fmt.Printf("Error connecting to the usenet server while indexing '%s': %v\n", group, err)
 		return err
@@ -53,6 +53,7 @@ func indexer(group string, ctx context.Context) error {
 		fmt.Printf("Error retrieving group information form the usenet server while indexing '%s': %v\n", group, err)
 		return err
 	}
+	DisconnectNNTP(conn)
 
 	// return if nothing to index...
 	if currentMessageID >= lastMessageID {
@@ -79,11 +80,22 @@ func indexer(group string, ctx context.Context) error {
 
 	for startMessageID < lastMessageID {
 
+		conn, err := ConnectNNTP()
+		defer DisconnectNNTP(conn)
+		if err != nil {
+			fmt.Printf("Error connecting to the usenet server while indexing '%s': %v\n", group, err)
+			return err
+		}
+		if _, _, _, err := conn.Group(group); err != nil {
+			fmt.Printf("Error selecting group while indexing '%s': %v\n", group, err)
+			return err
+		}
 		results, err := conn.Overview(startMessageID, endMessageID)
 		if err != nil {
 			fmt.Printf("Error retrieving message overview from the usenet server while indexing '%s': %v\n", group, err)
 			return err
 		}
+		DisconnectNNTP(conn)
 
 		for id, overview := range results {
 
