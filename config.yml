@@ -1,0 +1,31 @@
+# Usenet server settings
+Server:
+  Host: "news.eweka.nl"
+  Port: 119
+  User: ""
+  Password: ""
+
+# MySQL database server settings
+Database:
+  Host: "127.0.0.1"
+  Port: 3306
+  User: ""
+  Password: ""
+  Name: "nzbindexer"
+
+# groups to scan
+# if set to an existing file, only the groups listed in this file will be indexed
+#    if they are available on the usenet server
+#    each group name must be on its own line
+# if set to "ALL" all available groups on the usenet server will be indexed
+# if set to "BINARIES" all available alt.binaries.* groups on the usenet server will be indexed
+Groups: "./groups.txt"
+
+# amount of groups to scan in parallel
+# your usenet provider must allow this amount of concurrent connections
+ParallelScans: 50
+
+# amount of message headers to retrieve in one XOVER request per group
+# be careful when increasing this value as it will increase memory consumption without significantly increasing processing speed
+# ParallelScans x Step is the number of message headers held in memory at one time, with each header using around 1-1.2 kb of memory
+Step: 20000
