@@ -5,17 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 )
 
 func saveToDB(message *Message) error {
 
-	var result sql.Result
-	var posterID int64
+	var headerID, newHeader, fileID, newFile, posterID int64
 
-	newFile := 0
-	newHeader := 0
-
+	// start transaction
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tx, err := db.BeginTx(ctx, nil)
@@ -24,42 +20,74 @@ func saveToDB(message *Message) error {
 		return err
 	}
 
-	// update poster table if poster not found
-	// may give deadlock so try for tree times
-	for i := 0; i < 3; i++ {
-		result, err = tx.ExecContext(
-			ctx,
-			"INSERT IGNORE INTO `poster` (`poster`) VALUES(?)",
-			message.from,
-		)
-		if err == nil || (errors.As(err, &mysqlError) && mysqlError.Number != 1213) {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
+	// get headerID
+	headerID, err = getID(tx, ctx, "header_hashes", "hash", message.headerHash)
 	if err != nil {
-		fmt.Printf("Database error at insert poster: %v\n", err)
+		fmt.Printf("Database error at select headerID: %v\n", err)
 		tx.Rollback()
 		return err
 	}
-	// get posterID
-	row := tx.QueryRowContext(
-		ctx,
-		"SELECT `id` FROM `poster` WHERE `poster` = ?",
-		message.from,
-	)
-	if err = row.Scan(&posterID); err == sql.ErrNoRows {
-		fmt.Printf("Database error at select poster: %v\n", err)
+	if headerID == 0 {
+		// update header_hashes table if hash is not yet in it
+		headerID, err = updateTable(tx, ctx, "header_hashes", "hash", message.headerHash)
+		if err != nil || headerID == 0 {
+			if err == nil {
+				err = errors.New("return value for id is zero")
+			}
+			fmt.Printf("Database error at insert headerHash: %v\n", err)
+			tx.Rollback()
+			return err
+		}
+		newHeader = 1
+	}
+
+	// get fileID
+	fileID, err = getID(tx, ctx, "file_hashes", "hash", message.fileHash)
+	if err != nil {
+		fmt.Printf("Database error at select fileID: %v\n", err)
 		tx.Rollback()
 		return err
+	}
+	if fileID == 0 {
+		// update header_hashes table if hash is not yet in it
+		fileID, err = updateTable(tx, ctx, "file_hashes", "hash", message.fileHash)
+		if err != nil || fileID == 0 {
+			if err == nil {
+				err = errors.New("return value for id is zero")
+			}
+			fmt.Printf("Database error at insert fileHash: %v\n", err)
+			tx.Rollback()
+			return err
+		}
+		newFile = 1
+	}
+
+	// get posterID
+	posterID, err = getID(tx, ctx, "poster", "poster", message.from)
+	if err != nil {
+		fmt.Printf("Database error at select posterID: %v\n", err)
+		tx.Rollback()
+		return err
+	}
+	if posterID == 0 {
+		// update header_hashes table if hash is not yet in it
+		posterID, err = updateTable(tx, ctx, "poster", "poster", message.from)
+		if err != nil || posterID == 0 {
+			if err == nil {
+				err = errors.New("return value for id is zero")
+			}
+			fmt.Printf("Database error at insert poster: %v\n", err)
+			tx.Rollback()
+			return err
+		}
 	}
 
 	// update groups_to_files table
-	result, err = tx.ExecContext(
+	_, err = tx.ExecContext(
 		ctx,
-		"INSERT IGNORE INTO `groups_to_files` (`group_id`, `file`) VALUES(?, ?)",
+		"INSERT IGNORE INTO `groups_to_files` (`group_id`, `file_id`) VALUES(?, ?)",
 		message.groupId,
-		message.fileHash,
+		fileID,
 	)
 	if err != nil {
 		fmt.Printf("Database error at update groups_to_files: %v\n", err)
@@ -68,23 +96,16 @@ func saveToDB(message *Message) error {
 	}
 
 	// update segment table
-	// may give deadlock so try for tree times
-	for i := 0; i < 3; i++ {
-		result, err = tx.ExecContext(
-			ctx,
-			"INSERT INTO `segments` (`file_hash`, `segment_id`, `segment_no`, `size`, `date`, `poster`) VALUES(?, ?, ?, ?, ?, ?)",
-			message.fileHash,
-			message.messageId,
-			message.segmentNo,
-			message.bytes,
-			message.date,
-			posterID,
-		)
-		if err == nil || (errors.As(err, &mysqlError) && mysqlError.Number != 1213) {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
+	_, err = tx.ExecContext(
+		ctx,
+		"INSERT INTO `segments` (`file_id`, `segment_id`, `segment_no`, `size`, `date`, `poster`) VALUES(?, ?, ?, ?, ?, ?)",
+		fileID,
+		message.messageId,
+		message.segmentNo,
+		message.bytes,
+		message.date,
+		posterID,
+	)
 	if errors.As(err, &mysqlError) && mysqlError.Number != 1062 {
 		fmt.Printf("Database error at update segments: %v\n", err)
 		tx.Rollback()
@@ -100,11 +121,11 @@ func saveToDB(message *Message) error {
 	}
 
 	// update files table
-	result, err = tx.ExecContext(
+	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO `files` (`hash`, `header_hash`, `subject`, `file_no`, `segments`, `total_segments`, `size`, `date`, `poster`) VALUES(?, ?, ?, ?, 1, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `segments` = `segments` + 1, `size` = `size` + ?, `date` = ?",
-		message.fileHash,
-		message.headerHash,
+		"INSERT INTO `files` (`id`, `header_id`, `subject`, `file_no`, `segments`, `total_segments`, `size`, `date`, `poster`) VALUES(?, ?, ?, ?, 1, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `segments` = `segments` + 1, `size` = `size` + ?, `date` = ?",
+		fileID,
+		headerID,
 		message.subject,
 		message.fileNo,
 		message.totalSegments,
@@ -119,15 +140,12 @@ func saveToDB(message *Message) error {
 		tx.Rollback()
 		return err
 	}
-	if rows, _ := result.RowsAffected(); rows == 1 {
-		newFile = 1
-	}
 
-	// update header table
-	result, err = tx.ExecContext(
+	// update headers table
+	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO `headers` (`hash`, `files`, `total_files`, `size`, `date`, `poster`) VALUES(?, 1, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `files` = `files` + ?, `size` = `size` + ?, `date` = ?",
-		message.headerHash,
+		"INSERT INTO `headers` (`id`, `files`, `total_files`, `size`, `date`, `poster`) VALUES(?, 1, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `files` = `files` + ?, `size` = `size` + ?, `date` = ?",
+		headerID,
 		message.totalFiles,
 		message.bytes,
 		message.date,
@@ -141,11 +159,8 @@ func saveToDB(message *Message) error {
 		tx.Rollback()
 		return err
 	}
-	if rows, _ := result.RowsAffected(); rows == 1 {
-		newHeader = 1
-	}
 
-	// update group table
+	// update groups table
 	_, err = tx.ExecContext(
 		ctx,
 		"UPDATE `groups` SET `current_message_id` = ?,`headers` = `headers` + ?,`files` = `files` + ?, `segments` = `segments` + 1,  `size` = `size` + ?, `date` = ?  WHERE `group_name` = ?",
@@ -171,4 +186,30 @@ func saveToDB(message *Message) error {
 
 	return nil
 
+}
+
+func getID(tx *sql.Tx, ctx context.Context, table string, name string, value string) (id int64, err error) {
+	row := tx.QueryRowContext(
+		ctx,
+		"SELECT `id` FROM `"+table+"` WHERE `"+name+"` = ?",
+		value,
+	)
+	if err = row.Scan(&id); err != nil && err != sql.ErrNoRows {
+		return 0, err
+	} else if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return id, nil
+}
+
+func updateTable(tx *sql.Tx, ctx context.Context, table string, name string, value string) (id int64, err error) {
+	_, err = tx.ExecContext(
+		ctx,
+		"INSERT IGNORE INTO `"+table+"` (`"+name+"`) VALUES(?)",
+		value,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return getID(tx, ctx, table, name, value)
 }
