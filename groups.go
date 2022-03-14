@@ -47,21 +47,20 @@ func scanGroups() error {
 		first, _ := strconv.Atoi(groupData[2])
 		last, _ := strconv.Atoi(groupData[1])
 		if conf.Groups == "ALL" || conf.Groups == "BINARIES" || slices.Contains(groups, groupData[0]) {
-			serverGroups = append(serverGroups, groupData[0])
-			if last > first {
-				_, err := db.Exec(
-					"INSERT INTO `groups` (`group_name`, `first_message_id`, `last_message_id`, `current_message_id`) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE `first_message_id` = ?, `last_message_id` = ?",
-					groupData[0],
-					first,
-					last,
-					first,
-					first,
-					last,
-				)
-				if err != nil {
-					fmt.Printf("Database error while processing '%s': %v\n", groupData[0], err)
-					return err
-				}
+			_, err := db.Exec(
+				"INSERT INTO `groups` (`group_name`, `first_message_id`, `last_message_id`, `current_message_id`) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE `first_message_id` = ?, `last_message_id` = ?",
+				groupData[0],
+				first,
+				last,
+				first,
+				first,
+				last,
+			)
+			if err != nil {
+				fmt.Printf("Database error while processing '%s': %v\n", groupData[0], err)
+				return err
+			} else {
+				serverGroups = append(serverGroups, groupData[0])
 			}
 		}
 	}
