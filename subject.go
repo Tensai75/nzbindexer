@@ -24,11 +24,11 @@ func parseSubject(message *Message) error {
 		if matches := findNamedMatches(pattern2, reminder); matches != nil {
 			message.fileNo, _ = strconv.Atoi(matches["segmentNo"])
 			message.totalFiles, _ = strconv.Atoi(matches["totalSegments"])
-			message.header = strings.TrimSpace(matches["header"])
+			message.header = strings.Trim(matches["header"], " -")
 			reminder = matches["reminder"]
 		}
 		if matches := findNamedMatches(pattern3, reminder); matches != nil {
-			message.header = message.header + " " + strings.TrimSpace(matches["header"])
+			message.header = message.header + " " + strings.Trim(matches["header"], " -")
 			message.filename = matches["filename"]
 			message.basefilename = matches["basefilename"]
 		} else if matches := findNamedMatches(pattern4, reminder); matches != nil {
