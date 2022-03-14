@@ -49,7 +49,7 @@ func saveToDB(message *Message) error {
 		return err
 	}
 	if fileID == 0 {
-		// update header_hashes table if hash is not yet in it
+		// update file_hashes table if hash is not yet in it
 		fileID, err = updateTable(tx, ctx, "file_hashes", "hash", message.fileHash)
 		if err != nil || fileID == 0 {
 			if err == nil {
@@ -70,7 +70,7 @@ func saveToDB(message *Message) error {
 		return err
 	}
 	if posterID == 0 {
-		// update header_hashes table if hash is not yet in it
+		// update poster table if poster is not yet in it
 		posterID, err = updateTable(tx, ctx, "poster", "poster", message.from)
 		if err != nil || posterID == 0 {
 			if err == nil {
